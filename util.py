@@ -1,17 +1,18 @@
 import math
 import copy
-
+import numpy as np
 import torch
 import torch.optim as optim
 
 torch.set_default_tensor_type(torch.DoubleTensor)
 
 
-def train_objective(params, loss_fn, lr=0.01, l2=0.0, epochs=5000, print_freq=100):
+def train_objective(params, loss_fn, k = 0, lr=0.01, l2=0.0, epochs=5000, print_freq=100):
     '''
     Optimizes 'loss_fn' with respect to 'params'
-    'loss_fn' must take no arguments, and must return a tuple of two:
+    'loss_fn' must return a tuple of two:
     the value of the loss, and the model. 
+    'k' is the regularization term in MAP 
     '''
     
     best_model = None
@@ -23,7 +24,10 @@ def train_objective(params, loss_fn, lr=0.01, l2=0.0, epochs=5000, print_freq=10
             optimizer.zero_grad()
 
             # save loss and model if loss is the smallest observed so far
-            loss, model = loss_fn()
+            if loss_fn == "mle_loss":
+                loss, model = loss_fn()
+            else:
+                loss, model = loss_fn(k)
             if loss.item() < min_loss:
                 min_loss = loss.item()
                 best_model = copy.deepcopy(model)
@@ -73,10 +77,10 @@ def to_np(v):
 
 def zero_mean_unit_var_normalization(X, mean=None, std=None):
     if mean is None:
-        mean = np.mean(X, axis=0)
+        mean = torch.mean(X)
     if std is None:
-        std = np.std(X, axis=0)
-
+        std = torch.std(X)
+    
     X_normalized = (X - mean) / std
 
     return X_normalized, mean, std
