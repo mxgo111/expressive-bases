@@ -80,7 +80,9 @@ class FullyConnected(nn.Module):
 
         self.network.apply(init_weights)            
 
-
+# See this link for derivation: http://cs229.stanford.edu/section/cs229-gaussian_processes.pdf
+# prior is distributed N(0, weights_var^2)
+# output y is distributed N(wx, output_var^2)
 def bayesian_linear_regression_posterior_1d(X, y, weights_var, output_var):
     assert(len(X.shape) == 2)
     assert(len(y.shape) == 2)
@@ -94,7 +96,7 @@ def bayesian_linear_regression_posterior_1d(X, y, weights_var, output_var):
     posterior_cov = torch.pinverse(posterior_precision)
     posterior_mu = torch.mm(posterior_cov, torch.mm(X.t(), y)).squeeze() / output_var
     
-    return dists.MultivariateNormal(posterior_mu, precision_matrix=posterior_precision)
+    return dists.MultivariateNormal(posterior_mu, precision_matrix=posterior_precision), posterior_mu
 
     
 class BayesianRegression(nn.Module):
@@ -128,11 +130,11 @@ class BayesianRegression(nn.Module):
         phi = self.data_to_features(x)
         assert(len(phi.shape) == 2)
         
-        self.posterior = bayesian_linear_regression_posterior_1d(
+        self.posterior, posterior_mean = bayesian_linear_regression_posterior_1d(
             phi, y, self.weights_var, self.output_var,
         )
         
-        return self.posterior
+        return self.posterior, posterior_mean
         
     def sample_posterior_predictive(self, x, num_samples):
         assert(self.posterior is not None)
