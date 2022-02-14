@@ -3,11 +3,12 @@ import copy
 
 import torch
 import torch.optim as optim
+import numpy as np
 
 torch.set_default_tensor_type(torch.DoubleTensor)
 
 
-def train_objective(params, loss_fn, lr=0.01, l2=0.0, epochs=5000, print_freq=100):
+def train_objective(params, loss_fn, lr=0.01, l2=0.0, epochs=4000, print_freq=100):
     '''
     Optimizes 'loss_fn' with respect to 'params'
     'loss_fn' must take no arguments, and must return a tuple of two:
@@ -72,3 +73,11 @@ def to_np(v):
     return v.detach().numpy()
 
 
+##### CUSTOM UTIL FUNCTIONS #####
+
+# calculate the area in between the training data points
+def uncertainty_area(upper, lower, h):
+    """
+    Calculate the area between f1 and f2 over the interval [x1, x2] using n points in finite estimation
+    """
+    return np.sum(np.abs(upper - lower)) * h

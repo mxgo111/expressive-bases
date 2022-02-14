@@ -13,13 +13,10 @@ import torch.distributions as dists
 import matplotlib; matplotlib.use('Agg')  # Allows to create charts with undefined $DISPLAY
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+import pandas as pd
 import seaborn as sns
 
-from util import (
-    ftens_cuda,
-    to_np,
-    cuda_available,
-)
+from util import *
 
 
 def get_coverage_bounds(posterior_pred_samples, percentile):
@@ -52,6 +49,7 @@ def plot_1d_posterior_predictive(x_train, y_train, x_viz, y_pred):
     # plot predictive intervals
     for picp, alpha in zip([50.0, 68.0, 95.0], [0.4, 0.3, 0.2]):
         lower, upper = get_coverage_bounds(to_np(y_pred), picp)
+        
         ax.fill_between(
             x_viz, lower, upper, label='{}%-PICP'.format(picp), color='steelblue', alpha=alpha,
         )
@@ -72,5 +70,92 @@ def plot_1d_posterior_predictive(x_train, y_train, x_viz, y_pred):
     plt.show()
     #plt.savefig('output/pred.png')
     #plt.close()
+    
+
+def get_uncertainty_in_gap(model, basis, x_train, y_train, n_points, picp=95.0):
+    assert(len(x_train.shape) == 2 and x_train.shape[-1] == 1)
+    assert(len(y_train.shape) == 2 and y_train.shape[-1] == 1)
+
+    # make sure x_train is sorted in ascending order
+    x_train_sorted = np.sort(to_np(x_train.squeeze()))
+    assert(np.all(x_train_sorted[:-1] <= x_train_sorted[1:]))
+
+    # find gap
+    N = len(x_train)
+    gap = np.linspace(x_train_sorted.squeeze()[N//2-1], x_train_sorted.squeeze()[N//2], n_points)
+    h = gap[1] - gap[0]
+    gap = ftens_cuda(gap).unsqueeze(-1)
+    
+    # sample from inside gap
+    y_pred = model.sample_posterior_predictive(basis(gap), n_points)
+    lower, upper = get_coverage_bounds(to_np(y_pred), picp)
+    
+    area = uncertainty_area(upper, lower, h)
+
+    return area
 
 
+def plot_basis_functions_1d(num_final_layers, x_vals, basis, x_train, posterior_mean, numcols=12):
+    basis_vals = basis(torch.tensor(x_vals.reshape(-1, 1)))
+
+    # sort functions
+    def argsort(seq):
+        # https://stackoverflow.com/questions/3382352/equivalent-of-numpy-argsort-in-basic-python
+        return sorted(range(len(seq)), key=lambda x: abs(max(seq[x]) - min(seq[x])))
+
+    functions = [basis_vals[:, i].detach().cpu().numpy() for i in range(num_final_layers)]
+    argsorted_basis = argsort(functions)
+
+    # training data
+    x_train_np = x_train.detach().cpu().numpy().squeeze()
+    basis_train_np = basis(x_train).detach().cpu().numpy()
+
+    fig, axs = plt.subplots(num_final_layers//numcols + 1, numcols, figsize=(40, 15))
+    for j in range(num_final_layers):
+        i = argsorted_basis[j]
+        row, col = j//numcols, j % numcols
+        axs[row,col].plot(x_vals, functions[i])
+        axs[row,col].scatter(x_train_np, basis_train_np[:,i], c="red") # scatterplot training data
+        axs[row,col].set_title(f"w_posterior_mean={np.round(posterior_mean.detach().cpu().numpy()[i], 3)}")
+    plt.savefig("visualize-bases-02-07-22-v3")
+    plt.tight_layout()
+    plt.show()
+    
+    return basis_vals
+
+def eff_dim(evals, z):
+        assert z > 0
+        return np.sum(np.divide(evals, evals+z))
+
+def compute_eff_dim(basis_vals, z=1, visual=False):
+    # each column is a basis function
+    basis_vals_np = basis_vals.detach().cpu().numpy()
+    basis_vals_df = pd.DataFrame(basis_vals_np)
+    
+    # calculate correlations
+    corr = basis_vals_df.corr()
+    
+    # drop irrelevant rows/columns
+    corr.dropna(axis=0, how='all', inplace=True)
+    corr.dropna(axis=1, how='all', inplace=True)
+    
+    # eigenvals
+    evals, evecs = np.linalg.eig(corr)
+    
+    if visual:
+        plt.figure(figsize=(10,10))
+        # plot the heatmap
+        sns.heatmap(corr, 
+                xticklabels=corr.columns,
+                yticklabels=corr.columns)
+        
+        # Scree plot
+        plt.figure(figsize=(10, 5))
+        plt.scatter(np.arange(len(evals)), evals)
+        plt.plot(evals)
+        plt.title("Eigenvalues of correlation matrix")
+        plt.show()
+    
+    return eff_dim(evals, z)
+    
+    

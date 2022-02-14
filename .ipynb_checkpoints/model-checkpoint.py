@@ -136,7 +136,7 @@ class BayesianRegression(nn.Module):
         
         return self.posterior, posterior_mean
         
-    def sample_posterior_predictive(self, x, num_samples):
+    def sample_posterior_predictive(self, x, num_samples, add_noise=True):
         assert(self.posterior is not None)
         
         phi = self.data_to_features(x)
@@ -147,7 +147,10 @@ class BayesianRegression(nn.Module):
         r = torch.mm(phi, weights.t())
         assert(r.shape == torch.Size([x.shape[0], num_samples]))
         
-        return add_output_noise(r, self.output_var)
+        if add_noise:
+            return add_output_noise(r, self.output_var)
+        else:
+            return r
 
     def sample_prior_predictive(self, x, num_samples, output_noise=True):
         phi = self.data_to_features(x)
