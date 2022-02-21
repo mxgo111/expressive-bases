@@ -1,33 +1,38 @@
 import math
 import copy
-import numpy as np
+
 import torch
 import torch.optim as optim
+import numpy as np
 
 torch.set_default_tensor_type(torch.DoubleTensor)
 
 
-def train_objective(params, loss_fn, k = 0, lr=0.01, l2=0.0, epochs=5000, print_freq=100):
+def train_objective(params, loss_fn_name, loss_fn, lr=0.01, l2=0.0, epochs=4000, print_freq=100, k=0):
+    
     '''
     Optimizes 'loss_fn' with respect to 'params'
-    'loss_fn' must return a tuple of two:
+    'loss_fn' return a tuple of two:
     the value of the loss, and the model. 
-    'k' is the regularization term in MAP 
+    
+    k is the regularization term, default 0
     '''
     
     best_model = None
     min_loss = float('inf')
 
+ 
     optimizer = optim.Adam(params, lr=lr, weight_decay=l2)
     try:
         for epoch in range(epochs):
             optimizer.zero_grad()
 
             # save loss and model if loss is the smallest observed so far
-            if loss_fn == "mle_loss":
+            if loss_fn_name == "mle_loss":
                 loss, model = loss_fn()
-            else:
+            elif loss_fn_name == "map_loss":
                 loss, model = loss_fn(k)
+            
             if loss.item() < min_loss:
                 min_loss = loss.item()
                 best_model = copy.deepcopy(model)
@@ -75,16 +80,12 @@ def to_np(v):
         return v.detach().cpu().numpy()
     return v.detach().numpy()
 
-def zero_mean_unit_var_normalization(X, mean=None, std=None):
-    if mean is None:
-        mean = torch.mean(X)
-    if std is None:
-        std = torch.std(X)
-    
-    X_normalized = (X - mean) / std
 
-    return X_normalized, mean, std
+##### CUSTOM UTIL FUNCTIONS #####
 
-
-def zero_mean_unit_var_denormalization(X_normalized, mean, std):
-    return X_normalized * std + mean
+# calculate the area in between the training data points
+def uncertainty_area(upper, lower, h):
+    """
+    Calculate the area between f1 and f2 over the interval [x1, x2] using n points in finite estimation
+    """
+    return np.sum(np.abs(upper - lower)) * h
